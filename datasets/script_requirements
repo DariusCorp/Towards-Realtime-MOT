@@ -1,0 +1,6 @@
+pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
+pip install opencv-python
+pip install motmetrics
+pip install -e git+https://github.com/samson-wang/cython_bbox.git#egg=cython-bbox
+pip install -U scikit-learn
+pip install matplotlib

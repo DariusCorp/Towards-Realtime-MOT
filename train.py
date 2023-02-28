@@ -9,7 +9,7 @@ from utils.datasets import JointDataset, collate_fn
 from utils.utils import *
 from utils.log import logger
 from torchvision.transforms import transforms as T
-
+import torch
 
 def train(
         cfg,
@@ -26,7 +26,7 @@ def train(
         opt=None,
 ):
     # The function starts
-
+    torch.cuda.empty_cache()
     timme = strftime("%Y-%d-%m %H:%M:%S", gmtime())
     timme = timme[5:-3].replace('-', '_')
     timme = timme.replace(' ', '_')
@@ -63,7 +63,7 @@ def train(
         model.cuda().train()
 
         # Set optimizer
-        optimizer = torch.optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=opt.lr, momentum=.9)
+        optimizer = torch.optim.AdamW(filter(lambda x: x.requires_grad, model.parameters()), lr=opt.lr)
 
         start_epoch = checkpoint['epoch'] + 1
         if checkpoint['optimizer'] is not None:
@@ -83,8 +83,7 @@ def train(
         model.cuda().train()
 
         # Set optimizer
-        optimizer = torch.optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=opt.lr, momentum=.9,
-                                    weight_decay=1e-4)
+        optimizer = torch.optim.AdamW(filter(lambda x: x.requires_grad, model.parameters()), lr=opt.lr)
 
     model = torch.nn.DataParallel(model)
     # Set scheduler
@@ -157,6 +156,7 @@ def train(
                       'model': model.module.state_dict(),
                       'optimizer': optimizer.state_dict()}
 
+        os.makedirs(os.path.dirname(weights_to + '/cfg/yolo3.cfg'), exist_ok=True)
         copyfile(cfg, weights_to + '/cfg/yolo3.cfg')
         copyfile(data_cfg, weights_to + '/cfg/ccmcpe.json')
 
@@ -170,10 +170,10 @@ def train(
         # Calculate mAP
         if epoch % opt.test_interval == 0:
             with torch.no_grad():
-                mAP, R, P = test.test(cfg, data_cfg, weights=latest, batch_size=batch_size, img_size=img_size,
-                                      print_interval=40, nID=dataset.nID)
-                test.test_emb(cfg, data_cfg, weights=latest, batch_size=batch_size, img_size=img_size,
-                              print_interval=40, nID=dataset.nID)
+                mAP, R, P = test.test(cfg, data_cfg, weights=latest, batch_size=batch_size,
+                                      print_interval=40)
+                test.test_emb(cfg, data_cfg, weights=latest, batch_size=batch_size,
+                              print_interval=40)
 
         # Call scheduler.step() after opimizer.step() with pytorch > 1.1.0
         scheduler.step()
@@ -181,22 +181,22 @@ def train(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=30, help='number of epochs')
-    parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
+    parser.add_argument('--epochs', type=int, default=300, help='number of epochs')
+    parser.add_argument('--batch-size', type=int, default=22, help='size of each image batch')
     parser.add_argument('--accumulated-batches', type=int, default=1, help='number of batches before optimizer step')
-    parser.add_argument('--cfg', type=str, default='cfg/yolov3.cfg', help='cfg file path')
+    parser.add_argument('--cfg', type=str, default='cfg/yolov3_576x320.cfg', help='cfg file path')
     parser.add_argument('--weights-from', type=str, default='weights/',
                         help='Path for getting the trained model for resuming training (Should only be used with '
                              '--resume)')
     parser.add_argument('--weights-to', type=str, default='weights/',
                         help='Store the trained weights after resuming training session. It will create a new folder '
                              'with timestamp in the given path')
-    parser.add_argument('--save-model-after', type=int, default=10,
+    parser.add_argument('--save-model-after', type=int, default=50,
                         help='Save a checkpoint of model at given interval of epochs')
     parser.add_argument('--data-cfg', type=str, default='cfg/ccmcpe.json', help='coco.data file path')
-    parser.add_argument('--img-size', type=int, default=[1088, 608], nargs='+', help='pixels')
+    parser.add_argument('--img-size', type=int, default=[576, 320], nargs='+', help='pixels')
     parser.add_argument('--resume', action='store_true', help='resume training flag')
-    parser.add_argument('--print-interval', type=int, default=40, help='print interval')
+    parser.add_argument('--print-interval', type=int, default=20, help='print interval')
     parser.add_argument('--test-interval', type=int, default=9, help='test interval')
     parser.add_argument('--lr', type=float, default=1e-2, help='init lr')
     parser.add_argument('--unfreeze-bn', action='store_true', help='unfreeze bn')
